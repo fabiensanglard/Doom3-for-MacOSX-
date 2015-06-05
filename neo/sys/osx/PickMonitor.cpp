@@ -25,7 +25,6 @@ If you have questions concerning this license or the applicable additional terms
 
 ===========================================================================
 */
-#if 0
 #include "../../idlib/precompiled.h"
 #include <Carbon/Carbon.h>
 #include "PickMonitor.h"
@@ -42,10 +41,10 @@ If you have questions concerning this license or the applicable additional terms
 
 typedef struct
 {
-	GDHandle	device;
-	Rect		origRect;
-	Rect		scaledRect;
-	int			isMain;
+	CGDirectDisplayID	device;
+	CGRect				origRect;
+	CGRect				scaledRect;
+	int					isMain;
 }
 Monitor;
 
@@ -53,25 +52,9 @@ Monitor;
 //====================================================================================
 //	GLOBALS
 //====================================================================================
-static GDHandle sSelectedDevice;
+static CGDirectDisplayID sSelectedDevice;
 static int sNumMonitors;
 static Monitor sMonitors[kMaxMonitors];
-
-static RGBColor rgbBlack = { 0x0000, 0x0000, 0x0000 };
-static RGBColor rgbWhite = { 0xffff, 0xffff, 0xffff };
-static RGBColor rgbGray  = { 0x5252, 0x8A8A, 0xCCCC };	// this is the blue used in the Displays control panel
-
-//====================================================================================
-//	MACROS
-//====================================================================================
-
-#undef PtInRect
-#undef OffsetRect
-#undef InsetRect
-#undef EraseRect
-#undef MoveTo
-#undef LineTo
-
 
 //====================================================================================
 //	IMPLEMENTATION
@@ -84,30 +67,15 @@ static RGBColor rgbGray  = { 0x5252, 0x8A8A, 0xCCCC };	// this is the blue used 
 //	the dialog window. Pass NULL for any user pane procs you don't need to install.
 
 OSErr SetupUserPaneProcs(	ControlRef inUserPane,
-							ControlUserPaneDrawProcPtr inDrawProc, 
 							ControlUserPaneHitTestProcPtr inHitTestProc,
 							ControlUserPaneTrackingProcPtr inTrackingProc)
 {
 	OSErr	err = noErr;
-	ControlUserPaneDrawUPP drawUPP;
 	ControlUserPaneHitTestUPP hitTestUPP;
 	ControlUserPaneTrackingUPP trackingUPP;
 	
 	if (0 == inUserPane) return paramErr;
 	
-	if (inDrawProc && noErr == err)
-	{
-		drawUPP = NewControlUserPaneDrawUPP(inDrawProc);
-
-		if (0 == drawUPP)
-			err = memFullErr;
-		else
-			err = SetControlData(	inUserPane,
-									kControlEntireControl,
-									kControlUserPaneDrawProcTag,
-									sizeof(ControlUserPaneDrawUPP),
-									(Ptr)&drawUPP);
-	}
 	if (inHitTestProc && noErr == err)
 	{
 		hitTestUPP = NewControlUserPaneHitTestUPP(inHitTestProc);
@@ -146,15 +114,11 @@ OSErr SetupUserPaneProcs(	ControlRef inUserPane,
 
 OSErr DisposeUserPaneProcs(ControlRef inUserPane)
 {	
-	ControlUserPaneDrawUPP drawUPP;
 	ControlUserPaneHitTestUPP hitTestUPP;
 	ControlUserPaneTrackingUPP trackingUPP;
 	Size actualSize;
 	OSErr err;
 	
-	err = GetControlData(inUserPane, kControlEntireControl, kControlUserPaneDrawProcTag, sizeof(ControlUserPaneDrawUPP), (Ptr)&drawUPP, &actualSize);
-	if (err == noErr) DisposeControlUserPaneDrawUPP(drawUPP);
-
 	err = GetControlData(inUserPane, kControlEntireControl, kControlUserPaneHitTestProcTag, sizeof(ControlUserPaneHitTestUPP), (Ptr)&hitTestUPP, &actualSize);
 	if (err == noErr) DisposeControlUserPaneHitTestUPP(hitTestUPP);
 
@@ -165,65 +129,6 @@ OSErr DisposeUserPaneProcs(ControlRef inUserPane)
 }
 
 #pragma mark -
-
-//-----------------------------------------------------------------------------
-//	drawProc
-//-----------------------------------------------------------------------------
-//	Custom drawProc for our UserPane control.
-
-static pascal void drawProc(ControlRef inControl, SInt16 inPart)
-{
-	#pragma unused(inControl, inPart)
-	
-	int i;
-	RGBColor saveForeColor;
-	RGBColor saveBackColor;
-	PenState savePenState;
-
-	GetForeColor(&saveForeColor);	
-	GetBackColor(&saveBackColor);	
-	GetPenState(&savePenState);
-
-	RGBForeColor(&rgbBlack);
-	RGBBackColor(&rgbWhite);
-	PenNormal();
-	
-	for (i = 0; i < sNumMonitors; i++)
-	{
-		RGBForeColor(&rgbGray);
-		PaintRect(&sMonitors[i].scaledRect);
-		if (sMonitors[i].isMain)
-		{
-			Rect r = sMonitors[i].scaledRect;
-			InsetRect(&r, 1, 1);
-			r.bottom = r.top + 6;
-			RGBForeColor(&rgbWhite);
-			PaintRect(&r);
-			RGBForeColor(&rgbBlack);
-			PenSize(1,1);
-			MoveTo(r.left, r.bottom);
-			LineTo(r.right, r.bottom);
-		}
-		if (sMonitors[i].device == sSelectedDevice)
-		{
-			PenSize(3,3);
-			RGBForeColor(&rgbBlack);
-			FrameRect(&sMonitors[i].scaledRect);
-		}
-		else
-		{
-			PenSize(1,1);
-			RGBForeColor(&rgbBlack);
-			FrameRect(&sMonitors[i].scaledRect);
-		}
-	}
-	
-	// restore the original pen state and colors
-	RGBForeColor(&saveForeColor);	
-	RGBBackColor(&saveBackColor);	
-	SetPenState(&savePenState);
-}
-
 
 //-----------------------------------------------------------------------------
 //	hitTestProc
@@ -253,10 +158,13 @@ static pascal ControlPartCode trackingProc (
 {
 	#pragma unused (inControl, inStartPt, inActionProc)
 	int i;
+	CGPoint point;
+
+	point = CGPointMake(inStartPt.h, inStartPt.v);
 
 	for (i = 0; i < sNumMonitors; i++)
 	{
-		if (PtInRect(inStartPt, &sMonitors[i].scaledRect))
+		if (CGRectContainsPoint(sMonitors[i].scaledRect, point))
 		{
 			if (sMonitors[i].device != sSelectedDevice)
 			{
@@ -282,93 +190,110 @@ static pascal ControlPartCode trackingProc (
 //	for the monitor you want selected by default (pass 0 for the main monitor).
 //	Call this function before displaying the dialog window.
 
-OSErr SetupPickMonitorPane(ControlRef inPane, DisplayIDType inDefaultMonitor)
+OSErr SetupPickMonitorPane(ControlRef inPane, CGDirectDisplayID inDefaultMonitor)
 {
-	GDHandle dev = GetDeviceList();
+	CGDirectDisplayID displays[kMaxMonitors];
+	CGDisplayCount displayCount;
 	OSErr err = noErr;
+	int i;
 	
 	// make the default monitor the selected device
 	if (inDefaultMonitor)
-		DMGetGDeviceByDisplayID(inDefaultMonitor, &sSelectedDevice, true);
+		sSelectedDevice = inDefaultMonitor;
 	else
-		sSelectedDevice = GetMainDevice();
-
+		sSelectedDevice = CGMainDisplayID();
+	
 	// build the list of monitors
 	sNumMonitors = 0;
-	while (dev && sNumMonitors < kMaxMonitors)
+	if (CGGetActiveDisplayList(kMaxMonitors, displays, &displayCount) == CGDisplayNoErr)
 	{
-		if (TestDeviceAttribute(dev, screenDevice) && TestDeviceAttribute(dev, screenActive))
+		for (i = 0; i < displayCount; i++)
 		{
-			sMonitors[sNumMonitors].device = dev;
-			sMonitors[sNumMonitors].origRect = (**dev).gdRect;
-			sMonitors[sNumMonitors].isMain = (dev == GetMainDevice());
+			HIShapeRef shape;
+			CGRect r;
+			
+			HIWindowCopyAvailablePositioningShape(displays[i], kHICoordSpaceScreenPixel, &shape);
+			HIShapeGetBounds(shape, &r);
+			
+			sMonitors[i].device = displays[i];
+			sMonitors[i].isMain = (displays[i] == CGMainDisplayID());
+			sMonitors[i].origRect = r;
+			
 			sNumMonitors++;
 		}
-		dev = GetNextDevice(dev);
 	}
-
+	
 	// calculate scaled rects
 	if (sNumMonitors)
 	{
-		Rect origPaneRect, paneRect;
-		Rect origGrayRect, grayRect, scaledGrayRect;
-		float srcAspect, dstAspect, scale;
-		int i;
+		CGRect origPaneRect, paneRect;
+		CGRect origGrayRect, grayRect, scaledGrayRect;
+		CGFloat srcAspect, dstAspect, scale, dx, dy;
 		
-		GetControlBounds(inPane, &origPaneRect);
+		HIViewGetBounds(inPane, &origPaneRect);
+		
 		paneRect = origPaneRect;
-		OffsetRect(&paneRect, -paneRect.left, -paneRect.top);
+		paneRect = CGRectOffset(paneRect, -paneRect.origin.x, -paneRect.origin.y);
 		
-		GetRegionBounds(GetGrayRgn(), &origGrayRect);
+		origGrayRect = sMonitors[0].origRect;
+		for (i = 1 ; i < sNumMonitors; i++)
+		{
+			origGrayRect = CGRectUnion(origGrayRect, sMonitors[i].origRect);
+		}
 		grayRect = origGrayRect;
-		OffsetRect(&grayRect, -grayRect.left, -grayRect.top);
+		grayRect = CGRectOffset(grayRect, -grayRect.origin.x, -grayRect.origin.y);
 		
-		srcAspect = (float)grayRect.right / (float)grayRect.bottom;
-		dstAspect = (float)paneRect.right / (float)paneRect.bottom;
+		srcAspect = grayRect.size.width / grayRect.size.height;
+		dstAspect = paneRect.size.width / paneRect.size.height;
 		
 		scaledGrayRect = paneRect;
-		
 		if (srcAspect < dstAspect)
 		{
-			scaledGrayRect.right = (float)paneRect.bottom * srcAspect;
-			scale = (float)scaledGrayRect.right / grayRect.right;
+			scaledGrayRect.size.width = paneRect.size.height * srcAspect;
+			scale = scaledGrayRect.size.width / grayRect.size.width;
 		}
 		else
 		{
-			scaledGrayRect.bottom = (float)paneRect.right / srcAspect;
-			scale = (float)scaledGrayRect.bottom / grayRect.bottom;
+			scaledGrayRect.size.height = paneRect.size.width / srcAspect;
+			scale = scaledGrayRect.size.height / grayRect.size.height;
 		}
 		
 		for (i = 0; i < sNumMonitors; i++)
 		{
-			Rect r = sMonitors[i].origRect;
-			Rect r2 = r;
+			CGRect r = sMonitors[i].origRect;
+			CGRect r2 = r;
 			
 			// normalize rect and scale
-			OffsetRect(&r, -r.left, -r.top);
-			r.bottom = (float)r.bottom * scale;
-			r.right = (float)r.right * scale;
+			r = CGRectOffset(r, -r.origin.x, -r.origin.y);
+			r.size.height *= scale;
+			r.size.width *= scale;
 			
 			// offset rect wrt gray region
-			OffsetRect(&r, (float)(r2.left - origGrayRect.left) * scale, 
-							(float)(r2.top - origGrayRect.top) * scale);
-
+			dx = (r2.origin.x - origGrayRect.origin.x) * scale;
+			dy = (r2.origin.y - origGrayRect.origin.y) * scale;
+			r = CGRectOffset(r, dx, dy);
+			
 			sMonitors[i].scaledRect = r;
 		}
 		
 		// center scaledGrayRect in the pane
-		OffsetRect(&scaledGrayRect, (paneRect.right - scaledGrayRect.right) / 2,
-					(paneRect.bottom - scaledGrayRect.bottom) / 2);
-
+		dx = (paneRect.size.width - scaledGrayRect.size.width) / 2.0f;
+		dy = (paneRect.size.height - scaledGrayRect.size.height) / 2.0f;
+		scaledGrayRect = CGRectOffset(scaledGrayRect, dx, dy);
+		
 		// offset monitors to match
 		for (i = 0; i < sNumMonitors; i++)
-			OffsetRect(&sMonitors[i].scaledRect, scaledGrayRect.left, scaledGrayRect.top);
+		{
+			sMonitors[i].scaledRect = CGRectOffset(sMonitors[i].scaledRect,
+												   scaledGrayRect.origin.x,
+												   scaledGrayRect.origin.y);
+		}
 	}
 	else
 		return paramErr;
-		
+	
 	// setup the procs for the pick monitor user pane
-	err = SetupUserPaneProcs(inPane, drawProc, hitTestProc, trackingProc);
+	err = SetupUserPaneProcs(inPane,  hitTestProc, trackingProc);
 	return err;
 }
 
@@ -390,7 +315,67 @@ OSErr TearDownPickMonitorPane(ControlRef inPane)
 #pragma mark -
 
 //------------------------------------------------------------------------------------
-// ¥ PickMonitorHandler
+// ¥ DrawPaneHandler
+//------------------------------------------------------------------------------------
+// Our draw handler for the PickMonitor dialog.
+
+static pascal OSStatus DrawPaneHandler( EventHandlerCallRef inHandler, EventRef inEvent, void* inUserData )
+{
+	OSStatus result = eventNotHandledErr;
+	
+	// draw system control
+	result = CallNextEventHandler(inHandler, inEvent);
+	
+	if (result == noErr && GetEventKind( inEvent ) == kEventControlDraw)
+	{
+		CGContextRef context;
+		ControlRef control;
+		int i;
+		
+		// get control
+		GetEventParameter(inEvent, kEventParamDirectObject, typeControlRef, NULL, sizeof(control), NULL, &control);
+		
+		// get context
+		GetEventParameter(inEvent, kEventParamCGContextRef, typeCGContextRef, NULL, sizeof(context), NULL, &context);
+		
+		for (i = 0; i < sNumMonitors; i++)
+		{
+			CGContextSetRGBFillColor(context, 0.3215686275f, 0.5411764706f, 0.8f, 1.0f);
+			CGContextFillRect(context, sMonitors[i].scaledRect);
+			
+			if (sMonitors[i].isMain)
+			{
+				CGRect r = sMonitors[i].scaledRect;
+				r = CGRectInset(r, 1, 1);
+				r.size.height = 6;
+				CGContextSetRGBFillColor(context, 1.0f, 1.0f, 1.0f, 1.0f);
+				CGContextFillRect(context, r);
+				CGContextSetLineWidth(context, 1.0f);
+				CGContextMoveToPoint(context, r.origin.x, r.origin.y + r.size.height);
+				CGContextAddLineToPoint(context, r.origin.x + r.size.width, r.origin.y + r.size.height);
+				CGContextStrokePath(context);
+			}
+			if (sMonitors[i].device == sSelectedDevice)
+			{
+				CGContextSetLineWidth(context, 3.0f);
+				CGContextSetRGBStrokeColor(context, 0.0f, 0.0f, 0.0f, 1.0f);
+				CGContextStrokeRect(context, CGRectInset(sMonitors[i].scaledRect, 1.5f, 1.5f));
+			}
+			else
+			{
+				CGContextSetLineWidth(context, 1.0f);
+				CGContextSetRGBStrokeColor(context, 0.0f, 0.0f, 0.0f, 1.0f);
+				CGContextStrokeRect(context, sMonitors[i].scaledRect);
+			}
+		}
+	}
+	
+	
+	return result;
+}
+
+//------------------------------------------------------------------------------------
+// ´ PickMonitorHandler
 //------------------------------------------------------------------------------------
 // Our command handler for the PickMonitor dialog.
 
@@ -435,22 +420,14 @@ static pascal OSStatus PickMonitorHandler( EventHandlerCallRef inHandler, EventR
 
 Boolean CanUserPickMonitor (void)
 {
-	GDHandle dev = GetDeviceList();
+	CGDirectDisplayID displays[kMaxMonitors];
 	OSErr err = noErr;
-	int numMonitors;
+	CGDisplayCount numMonitors;
 	
 	// build the list of monitors
-	numMonitors = 0;
-	while (dev && numMonitors < kMaxMonitors)
-	{
-		if (TestDeviceAttribute(dev, screenDevice) && TestDeviceAttribute(dev, screenActive))
-		{
-			numMonitors++;
-		}
-		dev = GetNextDevice(dev);
-	}
+	err = CGGetActiveDisplayList(kMaxMonitors, displays, &numMonitors);
 
-	if (numMonitors > 1) return true;
+	if (err == CGDisplayNoErr && numMonitors > 1) return true;
 	else return false;
 }
 
@@ -459,7 +436,7 @@ Boolean CanUserPickMonitor (void)
 //-----------------------------------------------------------------------------
 // Prompts for a monitor. Returns userCanceledErr if the user cancelled.
 
-OSStatus PickMonitor (DisplayIDType *inOutDisplayID, WindowRef parentWindow)
+OSStatus PickMonitor (CGDirectDisplayID *inOutDisplayID, WindowRef parentWindow)
 {
 	WindowRef theWindow;
 	OSStatus status = noErr;
@@ -494,11 +471,15 @@ OSStatus PickMonitor (DisplayIDType *inOutDisplayID, WindowRef parentWindow)
 
 	SetupPickMonitorPane(monitorPane, *inOutDisplayID);
 
-	// Create our UPP and install the handler.
+	// Create our UPPs and install the handlers.
 
-	EventTypeSpec cmdEvent = { kEventClassCommand, kEventCommandProcess };
-	EventHandlerUPP handler = NewEventHandlerUPP( PickMonitorHandler );
-	InstallWindowEventHandler( theWindow, handler, 1, &cmdEvent, theWindow, NULL );
+	EventTypeSpec cmdEventPick = { kEventClassCommand, kEventCommandProcess };
+	EventHandlerUPP handlerPick = NewEventHandlerUPP( PickMonitorHandler );
+	InstallWindowEventHandler( theWindow, handlerPick, 1, &cmdEventPick, theWindow, NULL );
+	
+	EventTypeSpec cmdEventDraw = { kEventClassControl, kEventControlDraw };
+	EventHandlerUPP handlerDraw = NewEventHandlerUPP( DrawPaneHandler );
+	InstallEventHandler( GetControlEventTarget( monitorPane ), handlerDraw, 1, &cmdEventDraw, NULL, NULL );
 	
 	// Show the window
 
@@ -523,14 +504,15 @@ OSStatus PickMonitor (DisplayIDType *inOutDisplayID, WindowRef parentWindow)
 	if (parentWindow)
 		HideSheetWindow( theWindow );
 	DisposeWindow( theWindow );
-	DisposeEventHandlerUPP( handler );
+	DisposeEventHandlerUPP( handlerPick );
+	DisposeEventHandlerUPP( handlerDraw );
 
 	// Return settings to caller
 
 	if (sSelectedDevice != 0)
 	{
 		// Read back the controls
-		DMGetDisplayIDByGDevice (sSelectedDevice, &*inOutDisplayID, true);
+		*inOutDisplayID = sSelectedDevice;
 		return noErr;
 	}
 	else
@@ -538,4 +520,3 @@ OSStatus PickMonitor (DisplayIDType *inOutDisplayID, WindowRef parentWindow)
 
 }
 
-#endif
