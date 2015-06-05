@@ -315,7 +315,7 @@ OSErr TearDownPickMonitorPane(ControlRef inPane)
 #pragma mark -
 
 //------------------------------------------------------------------------------------
-// ¥ DrawPaneHandler
+// ´ DrawPaneHandler
 //------------------------------------------------------------------------------------
 // Our draw handler for the PickMonitor dialog.
 
@@ -471,11 +471,15 @@ OSStatus PickMonitor (CGDirectDisplayID *inOutDisplayID, WindowRef parentWindow)
 
 	SetupPickMonitorPane(monitorPane, *inOutDisplayID);
 
-	// Create our UPP and install the handler.
+	// Create our UPPs and install the handlers.
 
-	EventTypeSpec cmdEvent = { kEventClassCommand, kEventCommandProcess };
-	EventHandlerUPP handler = NewEventHandlerUPP( PickMonitorHandler );
-	InstallWindowEventHandler( theWindow, handler, 1, &cmdEvent, theWindow, NULL );
+	EventTypeSpec cmdEventPick = { kEventClassCommand, kEventCommandProcess };
+	EventHandlerUPP handlerPick = NewEventHandlerUPP( PickMonitorHandler );
+	InstallWindowEventHandler( theWindow, handlerPick, 1, &cmdEventPick, theWindow, NULL );
+	
+	EventTypeSpec cmdEventDraw = { kEventClassControl, kEventControlDraw };
+	EventHandlerUPP handlerDraw = NewEventHandlerUPP( DrawPaneHandler );
+	InstallEventHandler( GetControlEventTarget( monitorPane ), handlerDraw, 1, &cmdEventDraw, NULL, NULL );
 	
 	// Show the window
 
@@ -500,7 +504,8 @@ OSStatus PickMonitor (CGDirectDisplayID *inOutDisplayID, WindowRef parentWindow)
 	if (parentWindow)
 		HideSheetWindow( theWindow );
 	DisposeWindow( theWindow );
-	DisposeEventHandlerUPP( handler );
+	DisposeEventHandlerUPP( handlerPick );
+	DisposeEventHandlerUPP( handlerDraw );
 
 	// Return settings to caller
 
