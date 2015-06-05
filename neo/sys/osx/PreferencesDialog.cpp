@@ -43,7 +43,7 @@ static idCVar r_stretched( "r_stretched", "0", CVAR_ARCHIVE | CVAR_BOOL, "Used s
 #endif
 
 const UInt32 kRes_Stretched 				= (1 << 0);		// set if the resolution is a stretched mode (kCGDisplayModeIsStretched)
-const UInt32 kRes_Safe		 				= (1 << 1);		// ´´´æ(currently unused) set if the resolution is safe (kCGDisplayModeIsSafeForHardware)
+const UInt32 kRes_Safe		 				= (1 << 1);		// Â¥Â¥Â¥ÃŠ(currently unused) set if the resolution is safe (kCGDisplayModeIsSafeForHardware)
 
 // Data to be presented and edited in the prefs dialog
 struct PrefInfo
@@ -800,7 +800,7 @@ OSStatus CreateGameDisplayPreferencesDialog(const GameDisplayInfo *inGDInfo,
 
 
 //------------------------------------------------------------------------------------
-// ´ RunGameDisplayPreferencesDialog
+// Â¥ RunGameDisplayPreferencesDialog
 //------------------------------------------------------------------------------------
 // Runs the Mac-specific preferences dialog.
 
