@@ -315,7 +315,7 @@ OSErr TearDownPickMonitorPane(ControlRef inPane)
 #pragma mark -
 
 //------------------------------------------------------------------------------------
-// ´ DrawPaneHandler
+// ¥ DrawPaneHandler
 //------------------------------------------------------------------------------------
 // Our draw handler for the PickMonitor dialog.
 
