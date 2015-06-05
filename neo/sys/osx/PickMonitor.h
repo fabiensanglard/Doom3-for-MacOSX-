@@ -28,8 +28,6 @@ If you have questions concerning this license or the applicable additional terms
 
 #ifndef PICKMONITOR_H
 #define PICKMONITOR_H
-#if 0
-OSStatus PickMonitor (DisplayIDType *inOutDisplayID, WindowRef parentWindow);
+OSStatus PickMonitor (CGDirectDisplayID *inOutDisplayID, WindowRef parentWindow);
 Boolean	CanUserPickMonitor (void);
-#endif
 #endif // PICKMONITOR_H
